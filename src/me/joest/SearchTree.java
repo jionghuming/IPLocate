@@ -2,6 +2,15 @@ package me.joest;
 
 import java.io.Serializable;
 
+class Status {
+
+	final static int BIGTHAN = 1;  // 被插入的节点小
+	final static int SMALLTHAN = 2; // 被插入的节点大
+	final static int CONTAIN = 3; // 被插入的节点为被包含节点或者查询的IP在节点范围内
+	final static int CONTAINED = 4;   //被插入的节点为包含节点
+	final static int OTHER = 5;
+}
+
 /**
  * IP区间的位置信息
  * @author joest
@@ -29,16 +38,65 @@ class IPEntry extends Info implements Serializable{
 		this.endIp = _endIp;
 	}
 	
-	public IPEntry(String _beginIp)
-	{
-		this.beginIp = _beginIp;
-	}
-	
 	public int compareTo(IPEntry p)
 	{
-		return ipCompare(this.beginIp, p.beginIp);
+		String a1 = this.beginIp;
+		String b1 = this.endIp;
+		String a2 = p.beginIp;
+		String b2 = p.endIp;
+		
+		int a1b2 = ipCompare(a1, b2);
+		int b1a2 = ipCompare(b1, a2);
+		
+		int a1a2 = ipCompare(a1, a2);
+		int b1b2 = ipCompare(b1, b2);
+		
+		
+		// 1.不相交,且被插入的节点较小
+		if(a1b2>0)
+			return Status.BIGTHAN;
+		
+		// 1.不相交，且被插入的节点较大
+		if(b1a2<0)
+			return Status.SMALLTHAN;
+		
+		// 2.包含，且被插入的节点为被包含节点
+		if(a1a2<=0 && b1b2>=0)
+			return Status.CONTAIN;
+			
+		// 2.包含，且被插入的节点为包含节点
+		if(a1a2>=0 && b1b2<=0)
+			return Status.CONTAINED;
+			
+		// 3.相交，且被插入的节点后交
+		if(a1a2<0 && b1a2>=0 && b1b2<0)
+		{
+			p.beginIp = plusone(b1);
+			return Status.SMALLTHAN;
+		}
+		
+		// 3.相交，且被插入的节点前交
+		if(a1a2>0 && a1b2<=0 && b1b2>0)
+		{
+			p.endIp = minusone(a1);
+			return Status.BIGTHAN;
+		}
+		
+		return Status.OTHER;
 	}
 	
+	public int compareIP(String ip)
+	{
+		String beginip = this.beginIp;
+		String endip = this.endIp;
+		
+		if(this.ipCompare(ip, endip)>0)
+			return Status.SMALLTHAN;
+		else if(this.ipCompare(ip, beginip)<0)
+			return Status.BIGTHAN;
+		else
+			return Status.CONTAIN;
+	}
 	
 	/**
 	 * 比较两个IP大小
@@ -46,7 +104,7 @@ class IPEntry extends Info implements Serializable{
 	 * @param ip2
 	 * @return negtive if ip1 < ip2，positive if ip1 > ip2, else 0
 	 */
-	public int ipCompare(String ip1, String ip2)
+	private int ipCompare(String ip1, String ip2)
 	{
 		String[] ips1 = ip1.split("\\.");
 		String[] ips2 = ip2.split("\\.");
@@ -65,6 +123,66 @@ class IPEntry extends Info implements Serializable{
 		return 0;
 	}
 	
+	/**
+	 * 将ip加1操作
+	 * @param ip
+	 * @return 结果ip
+	 */
+	public String plusone(String ip)
+	{
+		int i;
+		String format="%s.%s.%s.%s";
+		String ccip;
+		String[] ipss = ip.split("\\.");
+		int [] ips = new int[4];
+		
+		for(i=0;i<4;i++)
+			ips[i] = Integer.parseInt(ipss[i]);
+		
+		i--;
+		ips[i] += 1;
+		while(ips[i]>255)
+		{
+			ips[i] -= 256;
+			i--;
+			ips[i] += 1;
+		}
+		
+		ccip = String.format(format, String.valueOf(ips[0]), String.valueOf(ips[1]), 
+				   String.valueOf(ips[2]), String.valueOf(ips[3]));
+		return ccip;
+	}
+	
+	/**
+	 * 将ip减1操作
+	 * @param ip
+	 * @return 结果ip
+	 */
+	public String minusone(String ip)
+	{
+		int i;
+		String format="%s.%s.%s.%s";
+		String ccip;
+		String[] ipss = ip.split("\\.");
+		int [] ips = new int[4];
+		
+		for(i=0;i<4;i++)
+			ips[i] = Integer.parseInt(ipss[i]);
+		
+		i--;
+		ips[i] -= 1;
+		while(ips[i]<0)
+		{
+			ips[i] += 256;
+			i--;
+			ips[i] -= 1;
+		}
+		
+		ccip = String.format(format, String.valueOf(ips[0]), String.valueOf(ips[1]), 
+				   String.valueOf(ips[2]), String.valueOf(ips[3]));
+		return ccip;
+	}
+	
 	
 	public boolean contains(String ip)
 	{
@@ -78,14 +196,6 @@ class IPEntry extends Info implements Serializable{
 		String formatter = "%s - %s: %s";
 		return String.format(formatter, this.beginIp, this.endIp, super.toString());
 	}
-
-	public String getBeginIp() {
-		return beginIp;
-	}
-
-	public void setBeginIp(String beginIp) {
-		this.beginIp = beginIp;
-	}
 }
 
 class BinaryNode implements Serializable
@@ -94,6 +204,7 @@ class BinaryNode implements Serializable
 	public IPEntry data;
 	public BinaryNode left;
 	public BinaryNode right;
+	public BinaryNode subnode;
 	public int height;
 	
 	public BinaryNode()
@@ -101,25 +212,32 @@ class BinaryNode implements Serializable
 		this.data = null;
 		this.left = null;
 		this.right = null;
+		this.subnode = null;
 		this.height = 0;
 	}
 	
 	public BinaryNode(IPEntry ip)
 	{
-		this(ip, null, null, 0);
+		this(ip, null, null, null, 0);
 	}
 	
-	public BinaryNode(IPEntry r, BinaryNode left, BinaryNode right, int height)
+	public BinaryNode(IPEntry r, BinaryNode left, BinaryNode right, BinaryNode subnode, int height)
 	{
 		this.data = r;
 		this.left = left;
 		this.right = right;
+		this.subnode = subnode;
 		this.height = height;
 	}
 	
 	public int compareTo(BinaryNode b)
 	{
 		return this.data.compareTo(b.data);
+	}
+	
+	public int compareIP(String ip)
+	{
+		return this.data.compareIP(ip);
 	}
 	
 	public String toString()
@@ -175,16 +293,16 @@ public class SearchTree implements Serializable{
 
 	
 	/**
-	 * 
-	 * @param p
-	 * @param newnode
-	 * @return parent node of newnode
+	 * 将新节点插入到以p为根节点的子树
+	 * @param 子树的根节点
+	 * @param 需要插入的新节点
+	 * @return 插入新节点后，新节点的父节点
 	 */
 	private BinaryNode insert(BinaryNode newnode, BinaryNode p)
 	{
 		if(p == null)
 			return newnode;
-		if(p.compareTo(newnode)>0)
+		if(p.compareTo(newnode) == Status.BIGTHAN)
 		{
 			p.left = this.insert(newnode, p.left);
 			if(height(p.left) - height(p.right) == 2)
@@ -195,7 +313,7 @@ public class SearchTree implements Serializable{
 					p = rotateWithLRChild(p);
 			}
 		}
-		else if(p.compareTo(newnode)<0) //right
+		else if(p.compareTo(newnode) == Status.SMALLTHAN) //right
 		{
 			p.right = this.insert(newnode, p.right);
 			if(height(p.right) - height(p.left) == 2)
@@ -208,10 +326,45 @@ public class SearchTree implements Serializable{
 					p = rotateWithRightChild(p);
 			}
 		}
+		else if(p.compareTo(newnode) == Status.CONTAIN)
+		{
+			BinaryNode pp = p;
+			while(pp.subnode != null)
+				pp = pp.subnode;
+			pp.subnode = newnode;
+		}
+		else if(p.compareTo(newnode) == Status.CONTAINED)
+		{
+			changeData(p, newnode);
+		    BinaryNode pp = p;
+		    while(pp.subnode != null)
+		    	pp = pp.subnode;
+		    pp.subnode = newnode;
+		}
 		else
-			;	//
+			;	//OTHER
 		p.height = Math.max(height(p.left), height(p.right)) + 1;
 		return p;
+	}
+	
+	/**
+	 * 当目标节点包含需要插入的节点时，交换节点的数据
+	 * @param p
+	 * @param newnode
+	 */
+	public void changeData(BinaryNode p, BinaryNode newnode)
+	{
+		IPEntry left = p.left.data;
+		IPEntry right = p.right.data;
+		IPEntry newEntry;
+		
+		left.compareTo(newnode.data);
+		right.compareTo(newnode.data);
+		
+		//switch
+		newEntry = newnode.data;
+		newnode.data = p.data;
+		p.data = newEntry;
 	}
 	
 	
@@ -269,7 +422,7 @@ public class SearchTree implements Serializable{
 		return rotateWithRightChild(node);
 	}
 
-	public BinaryNode search(BinaryNode key)
+	public BinaryNode search(String key)
 	{
 		BinaryNode pp, parent, min;
 		min = parent = pp = this.root;
@@ -277,33 +430,28 @@ public class SearchTree implements Serializable{
 			return null;
 		while(pp != null)
 		{
-			if(pp.compareTo(key)<0)
+			if(pp.compareIP(key) == Status.SMALLTHAN)
 			{
 				min = pp;
 				parent = pp;
 				pp = pp.right;
 			}
-			else if(pp.compareTo(key)>0)
+			else if(pp.compareIP(key) == Status.BIGTHAN)
 			{
 				parent = pp;
 				pp = pp.left;
 			}
-			else
-				return pp;
+			else if(pp.compareIP(key) == Status.CONTAIN)
+			{
+				BinaryNode deep = pp;
+				while(deep.subnode != null && deep.subnode.compareIP(key) == Status.CONTAIN)
+					deep = pp.subnode;
+				return deep;
+			}
 		}
-		if(parent.compareTo(key)>0)
-			return min;
-		return parent;
+		return null;
 	}
 
-	public BinaryNode search(String ip)
-	{
-		IPEntry ipe = new IPEntry(ip);
-		BinaryNode node;
-		node = this.search(new BinaryNode(ipe));
-		return node;
-	}
-	
 	public void printTree()
 	{
 		this.printTree(this.root);
@@ -321,6 +469,7 @@ public class SearchTree implements Serializable{
 	
 	public static void main(String[] args)
 	{
-		
+		//TODO
 	}
 }
+

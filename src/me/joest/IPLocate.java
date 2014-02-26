@@ -22,8 +22,14 @@ public class IPLocate {
 
 	private Map<String, LocateResult> ipcache;
 	private SearchTree st;
+	private boolean usingCache;
 	
 	private static IPLocate instance;
+	
+	public void printSearchTree()
+	{
+		this.st.printTree();
+	}
 	
 	private IPLocate()
 	{
@@ -33,11 +39,12 @@ public class IPLocate {
 	 * 使用单一模式获得IPLocate实例
 	 * @return IPLocate实例
 	 */
-	public static IPLocate getInstance()
+	public static IPLocate getInstance(boolean _usingCache)
 	{
 		if(instance == null)
 		{
 			instance = new IPLocate();
+			instance.usingCache = _usingCache;
 			instance.init();
 		}
 		return instance;
@@ -63,7 +70,9 @@ public class IPLocate {
 			ObjectInputStream oin = new ObjectInputStream(new FileInputStream(fn));
 			st = (SearchTree)oin.readObject();
 			this.st = st;
-			this.ipcache = new HashMap<String, LocateResult>();
+			
+			if(this.usingCache == true)
+				this.ipcache = new HashMap<String, LocateResult>();
 		} catch(FileNotFoundException e) {
 			System.out.println("没有找到序列化文件, 先使用IPLocate.build(String ipfile)创建.");
 		} catch (IOException e) {
@@ -103,7 +112,7 @@ public class IPLocate {
 	}
 	
 	/**
-	 * 
+	 * 创建序列化文件
 	 */
 	public static void build(String filename)
 	{
@@ -135,38 +144,34 @@ public class IPLocate {
 	public LocateResult locate(String ip)
 	{
 		LocateResult lr;
+		LocateResult result;
 		if(!isIP(ip))
 		{
 			System.out.println("查询的IP不符合规范.");
 			return null;
 		}
 		
-		if(this.ipcache.containsKey(ip))
+		if(this.usingCache == true && this.ipcache.containsKey(ip))
 		{
-			lr = this.ipcache.get(ip);
-			return lr;
+			result = this.ipcache.get(ip);
+			return result;
 		}
 		
 		SearchTree tree = this.st;
 		BinaryNode node = tree.search(ip);
 		if(node == null)
-		{
-			this.ipcache.put(ip, new LocateResult(ip));
-			return null;
-		}
+			result = null;
 		
 		IPEntry ipe = node.data;
 		if(ipe.contains(ip))
-		{
-			lr = new LocateResult(ipe, ip);
-			this.ipcache.put(ip, lr);
-			return lr;
-		}
+			result = new LocateResult(ipe, ip);
 		else
-		{
-			this.ipcache.put(ip, new LocateResult(ip));
-			return null;
-		}
+			result = null;
+		
+		if(this.usingCache == true)
+			this.ipcache.put(ip, result);
+		
+		return result;
 	}
 	
 	/**
@@ -174,7 +179,8 @@ public class IPLocate {
 	 */
 	public void clear()
 	{
-		this.ipcache.clear();
+		if(this.usingCache == true)
+			this.ipcache.clear();
 	}
 	
 	/**
@@ -206,7 +212,7 @@ public class IPLocate {
 	{
 		String ipfile = "outipall.ip";
 		IPLocate.build(ipfile);
-		IPLocate iplocate = IPLocate.getInstance();
+		IPLocate iplocate = IPLocate.getInstance(true);
 		
 		String ip = "0.0.0.1";
 		LocateResult lr = iplocate.locate(ip);
@@ -318,3 +324,4 @@ class Info implements Serializable{
 	}
 
 }
+
